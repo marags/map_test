@@ -1,0 +1,26 @@
+TWO WAYS TO RUN
+===============
+
+1) STATIC MODE (default) — no Python app server, feeds from a JSON file.
+   Works on any static host with HTTP Range support (GitHub Pages, NAS, nginx):
+
+     python3 serve.py            ->  http://127.0.0.1:8090
+   (plain `python3 -m http.server` will NOT render the basemap — no Range support)
+
+   The feed is static/data/events.json — replayed on a loop. Replace it with
+   your own data in the same shape (see the STATIC FEED TOGGLE comment at the
+   top of static/map.js). Each event is a src(lat,lon) -> dst(lat,lon) pair
+   plus labels — i.e. a generic from/to flow map.
+
+2) LIVE/DEMO MODE — the original WebSocket server (needs Python + terminal):
+   set  window.STATIC_FEED = null  in static/map.js, then:
+
+     python3 -m venv .venv && ./.venv/bin/pip install -r requirements.txt
+     ./.venv/bin/python AttackMapServer.py --demo
+   ->  http://127.0.0.1:64299
+
+EDITING NOTE: every script in index.html is pinned with an integrity hash
+(tamper protection). The pin on static/map.js has been REMOVED so you can
+tweak its config freely. If you ever edit any OTHER pinned file, refresh its
+hash or the browser silently blocks it:
+  openssl dgst -sha384 -binary static/<file> | openssl base64 -A

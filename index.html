@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self' ws: wss:; object-src 'none'; base-uri 'self'; form-action 'none'">
+        <title>T-Pot Attack Map - Real-time Cybersecurity Visualization</title>
+        <meta name="description" content="Real-time visualization of T-Pot honeypot attacks and cybersecurity threats">
+
+        <!-- Check integrity: openssl dgst -sha384 -binary your.file.name | openssl base64 -A-->
+
+        <!--Setup Chart.js for enhanced visualizations-->
+        <script src="static/chart.umd.js" defer integrity="sha384-hfkuqrKeWFmnTMWN31VWyoe8xgdTADD11kgxmdpx2uyE6j5Az5uZq6u6AKYYmAOw"></script>
+
+        <!--Setup Bootstrap-->
+        <link href="static/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB"/>
+
+        <!--Setup MapLibre GL (self-hosted, HANDOFF-v2 D1). The ESM graph
+            (map-boot.mjs -> maplibre-gl.mjs / pmtiles.mjs / fflate.mjs and the
+            renderer modules) is pulled in by map.js via await import();
+            modulepreload links warm and integrity-pin that graph (§14.4). -->
+        <link rel="stylesheet" href="static/maplibre-gl.css" integrity="sha384-Q5Blg3vUVAlUKqIPJYz7wGnz40Vwrx4pVuFVicI73+8c/26Zr5hhckfuIiIUflLE"/>
+        <link rel="modulepreload" href="static/map-boot.mjs" integrity="sha384-AScU/9GLzBrZAxf3GCgTgXcM3YcyYRS2LbrYqYuMm28tOeqq14p6aDu/W4DkP4ot">
+        <link rel="modulepreload" href="static/maplibre-gl.mjs" integrity="sha384-Wf5cGlTLBG2VP5WNDIH9vAGdeiw2nYya5CpUWtPY2XXMoIhzjChL0DPEYddOuq2B">
+        <link rel="modulepreload" href="static/maplibre-gl-shared.mjs" integrity="sha384-BOGwfR1zlfKJlXWbHSaENskAbBb0zGUa0i76kRTASFlqCIQEvPJMgE6ghvw6Gdp5">
+        <link rel="modulepreload" href="static/pmtiles.mjs" integrity="sha384-rt1przjoT+WghNs8YSJN3lGpJAi7jd/R9ZKn3LOdEnBa+num0kppF4KjTVOCaTMp">
+        <link rel="modulepreload" href="static/fflate.mjs" integrity="sha384-SNKgXdor2lJGkzPBg9ywUthk1cf7jcEOGewjMgbgasovEnR+wHQyNIf318oz4E/E">
+        <link rel="modulepreload" href="static/attack-renderer.mjs" integrity="sha384-m3WQlMgTrOdxM7HN68Y/gKrLQYyMR8xt0el9nRcTY4Jdb4qx7G7KpZaqwIIvXlLP">
+        <link rel="modulepreload" href="static/attack-geometry.mjs" integrity="sha384-dW+eJz4zY+4NIgmJC3GzurG3EHoaD3SExRB8OQzubKQl8kPIvpvqkq0A1R6yXOs0">
+
+        <!-- Local Fonts (Inter & JetBrains Mono) -->
+        <link href="static/fonts/fonts.css" rel="stylesheet" integrity="sha384-n138lt+vFMyu24Fv1itVvEQokyUNV3NNKUZNsuBW+omxRqQSOEShiH/5ymOzEV8r">
+
+        <!-- Local Icons (Font Awesome) -->
+        <link rel="stylesheet" href="static/fontawesome/css/all.min.css" integrity="sha384-qrALq7+6jBOZIQsNnT6xGkMDru64qD6uTlDra39xrt2SoXl4pO3FX6Roz/RpR/BS">
+
+        <link href="static/index.css?v=7" rel="stylesheet" integrity="sha384-1tOU/vzLc3GRLSJ3+FXAZug+911TR8rlK6kA/S+/mGAGecVvVXloNNYYs9H/ljyo"/>
+    </head>
+
+    <body>
+        <!-- DEMO DATA badge (D27): shown while incoming messages carry demo: true -->
+        <div id="demo-badge" hidden>DEMO DATA</div>
+
+        <!-- Loading Screen -->
+        <div id="loading-screen" class="loading-screen">
+            <div class="loading-content">
+                <div class="spinner"></div>
+                <h2>Initializing T-Pot Attack Map</h2>
+                <p>Loading real-time cybersecurity data...</p>
+            </div>
+        </div>
+
+        <!-- Top Navigation Bar -->
+        <nav class="top-navbar">
+            <div class="navbar-content flex-between">
+                <div class="navbar-brand flex-center">
+                    <i class="fas fa-shield-halved"></i>
+                    <span>T-Pot Attack Map</span>
+                </div>
+                
+                <!-- T-Pot Stats in Header -->
+                <div class="navbar-stats">
+                    <div class="stats-group">
+                        <div class="stats-header-title">
+                            <i class="fas fa-satellite-dish fa-lg"></i>
+                            <span id="honeypotStatsHeader">Attacks</span>
+                        </div>
+                        <div class="stats-inline">
+                            <div class="stat-inline-item flex-center">
+                                <span class="stat-inline-label">1m</span>
+                                <span class="stat-inline-value" id="last_1m">-</span>
+                            </div>
+                            <div class="stat-separator">|</div>
+                            <div class="stat-inline-item flex-center">
+                                <span class="stat-inline-label">1h</span>
+                                <span class="stat-inline-value" id="last_1h">-</span>
+                            </div>
+                            <div class="stat-separator">|</div>
+                            <div class="stat-inline-item flex-center">
+                                <span class="stat-inline-label">24h</span>
+                                <span class="stat-inline-value" id="last_24h">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="navbar-controls">
+                    <div class="connection-status" id="connection-status">
+                        <div class="status-indicator" id="status-indicator"></div>
+                        <span id="status-text">Connecting...</span>
+                    </div>
+                    <div class="cache-status" id="cache-status" title="Data Cache Status">
+                        <div class="status-indicator" id="cache-indicator"></div>
+                        <span id="cache-text">Cache</span>
+                    </div>
+                    <button class="btn-base control-btn flex-center-both hover-lift" id="theme-toggle" title="Toggle Theme">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                    <button class="btn-base control-btn flex-center-both hover-lift" id="fullscreen-toggle" title="Toggle Fullscreen">
+                        <i class="fas fa-expand"></i>
+                    </button>
+                    <button class="btn-base control-btn flex-center-both hover-lift" id="settings-toggle" title="Settings">
+                        <i class="fas fa-gear"></i>
+                    </button>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Container -->
+        <div class="main-container">
+            <!-- Map Container -->
+            <div class="map-container">
+                <div id="map"></div>
+                <!-- Map failure state (functional markup, HANDOFF-v2 §13.5/§13.6;
+                     populated by showMapFailure(); styled in WP8). The dashboard
+                     and data channel stay alive when this is shown. -->
+                <div id="map-failure-panel" hidden>
+                    <div class="map-failure-content">
+                        <i class="fas fa-triangle-exclamation"></i>
+                        <h3 id="map-failure-title"></h3>
+                        <p id="map-failure-hint"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Side Panel (Collapsible) -->
+            <div class="side-panel" id="side-panel">
+                <div class="panel-toggle" id="panel-toggle">
+                    <!-- panel collapses to the RIGHT: open shows '>', collapsed rotates to '<' -->
+                    <i class="fas fa-chevron-right"></i>
+                </div>
+                
+                <div class="panel-content">
+                    <!-- Service Legend -->
+                    <div class="panel-section">
+                        <div class="section-header flex-center">
+                            <i class="fas fa-palette"></i>
+                            <h3>Service Types</h3>
+                        </div>
+                        <div class="service-legend">
+                            <div class="service-item">
+                                <div class="service-color protocol-adb"></div>
+                                <span>ADB</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-chargen"></div>
+                                <span>CHARGEN</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-dhcp"></div>
+                                <span>DHCP</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-dicom"></div>
+                                <span>DICOM</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-dns"></div>
+                                <span>DNS</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-elasticsearch"></div>
+                                <span>ELASTICSEARCH</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-email"></div>
+                                <span>EMAIL</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-ftp"></div>
+                                <span>FTP</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-ftp-data"></div>
+                                <span>FTP-DATA</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-hl7"></div>
+                                <span>HL7</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-http"></div>
+                                <span>HTTP</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-https"></div>
+                                <span>HTTPS</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-iec104"></div>
+                                <span>IEC104</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-imap"></div>
+                                <span>IMAP</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-imaps"></div>
+                                <span>IMAPS</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-industrial"></div>
+                                <span>INDUSTRIAL</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-ipp"></div>
+                                <span>IPP</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-ipmi"></div>
+                                <span>IPMI</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-ipsec"></div>
+                                <span>IPSEC</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-irc"></div>
+                                <span>IRC</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-jetdirect"></div>
+                                <span>JETDIRECT</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-ldap"></div>
+                                <span>LDAP</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-memcached"></div>
+                                <span>MEMCACHED</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-mongodb"></div>
+                                <span>MONGODB</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-mqtt"></div>
+                                <span>MQTT</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-mysql"></div>
+                                <span>MYSQL</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-nfs"></div>
+                                <span>NFS</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-ntp"></div>
+                                <span>NTP</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-oracle"></div>
+                                <span>ORACLE</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-pop3"></div>
+                                <span>POP3</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-pop3s"></div>
+                                <span>POP3S</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-postgresql"></div>
+                                <span>POSTGRESQL</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-pptp"></div>
+                                <span>PPTP</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-rdp"></div>
+                                <span>RDP</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-redis"></div>
+                                <span>REDIS</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-rpc"></div>
+                                <span>RPC</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-scada"></div>
+                                <span>SCADA</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-sip"></div>
+                                <span>SIP</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-smb"></div>
+                                <span>SMB</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-smtp"></div>
+                                <span>SMTP</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-smtps"></div>
+                                <span>SMTPS</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-snmp"></div>
+                                <span>SNMP</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-socks"></div>
+                                <span>SOCKS</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-sql"></div>
+                                <span>SQL</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-ssdp"></div>
+                                <span>SSDP</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-ssh"></div>
+                                <span>SSH</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-telnet"></div>
+                                <span>TELNET</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-tftp"></div>
+                                <span>TFTP</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-vnc"></div>
+                                <span>VNC</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-wins"></div>
+                                <span>WINS</span>
+                            </div>
+                            <div class="service-item">
+                                <div class="service-color protocol-other"></div>
+                                <span>OTHER</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Panel (Dashboard) -->
+            <div class="bottom-panel" id="bottom-panel">
+                <div class="panel-tabs">
+                    <button class="tab-btn active" data-tab="live-feed">
+                        <i class="fas fa-list-ol"></i>
+                        Live Feed
+                    </button>
+                    <button class="tab-btn" data-tab="top-ips">
+                        <i class="fas fa-bullseye"></i>
+                        Top IPs
+                    </button>
+                    <button class="tab-btn" data-tab="countries">
+                        <i class="fas fa-globe"></i>
+                        Top Countries
+                    </button>
+                    <button class="tab-btn" data-tab="overview">
+                        <i class="fas fa-chart-bar"></i>
+                        Dashboard
+                    </button>
+                    <div class="panel-resize" id="panel-resize">
+                        <i class="fas fa-bars"></i>
+                    </div>
+                </div>
+
+                <div class="tab-content">
+                    <!-- Overview Tab -->
+                    <div class="tab-pane" id="overview-tab">
+                        <div class="dashboard-grid">
+                            <div class="dashboard-card">
+                                <div class="card-header flex-between">
+                                    <h4 class="flex-center"><i class="fas fa-bullseye"></i> Attack Distribution</h4>
+                                </div>
+                                <div class="card-content">
+                                    <canvas id="attack-distribution-chart"></canvas>
+                                </div>
+                            </div>
+                            <div class="dashboard-card">
+                                <div class="card-header flex-between">
+                                    <h4 class="flex-center"><i class="fas fa-clock"></i> Activity Timeline</h4>
+                                    <div class="time-range-selector">
+                                        <select id="timeline-interval" class="timeline-dropdown" title="Timeline range" aria-label="Timeline range">
+                                            <option value="1m">Last 1 Minute</option>
+                                            <option value="1h">Last 1 Hour</option>
+                                            <option value="24h" selected>Last 24 Hours</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="card-content">
+                                    <canvas id="timeline-chart"></canvas>
+                                </div>
+                            </div>
+                            <div class="dashboard-card">
+                                <div class="card-header">
+                                    <h4><i class="fas fa-network-wired"></i> Protocol Breakdown</h4>
+                                </div>
+                                <div class="card-content">
+                                    <canvas id="protocol-chart"></canvas>
+                                </div>
+                            </div>
+                            <div class="dashboard-card">
+                                <div class="card-header">
+                                    <h4><i class="fas fa-server"></i> Honeypot Performance</h4>
+                                </div>
+                                <div class="card-content">
+                                    <canvas id="honeypot-chart"></canvas>
+                                </div>
+                            </div>
+                            <div class="dashboard-card">
+                                <div class="card-header">
+                                    <h4><i class="fas fa-temperature-half"></i> Threat Heatmap</h4>
+                                </div>
+                                <div class="card-content">
+                                    <div id="threat-heatmap"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Top IPs Tab -->
+                    <div class="tab-pane" id="top-ips-tab">
+                        <div class="table-wrapper">
+                            <table class="data-table" id="ip-table">
+                                <thead>
+                                    <tr>
+                                        <th>Rank</th>
+                                        <th>Hits</th>
+                                        <th>Source IP</th>
+                                        <th>Source IP Reputation</th>
+                                        <th>Flag</th>
+                                        <th>Country</th>
+                                        <th>Last Protocol Seen</th>
+                                        <th>Last Seen</th>
+                                    </tr>
+                                </thead>
+                                <tbody id='ip-tracking'>
+                                    <!-- Dynamic content -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Countries Tab -->
+                    <div class="tab-pane" id="countries-tab">
+                        <div class="table-wrapper">
+                            <table class="data-table" id="country-table">
+                                <thead>
+                                    <tr>
+                                        <th>Rank</th>
+                                        <th>Hits</th>
+                                        <th>Flag</th>
+                                        <th>Country</th>
+                                        <th>Top Protocol</th>
+                                        <th>Unique IPs</th>
+                                        <th>Last Seen IP</th>
+                                        <th>Last Seen</th>
+                                    </tr>
+                                </thead>
+                                <tbody id='country-tracking'>
+                                    <!-- Dynamic content -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Live Feed Tab -->
+                    <div class="tab-pane" id="live-feed-tab">
+                        <div class="table-wrapper">
+                            <table class="data-table" id="live-attacks-table">
+                                <thead>
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>Source IP</th>
+                                        <th>IP Reputation</th>
+                                        <th>Flag</th>
+                                        <th>Country</th>
+                                        <th>Honeypot</th>
+                                        <th>Protocol</th>
+                                        <th>Port</th>
+                                        <th>T-Pot Hostname</th>
+                                    </tr>
+                                </thead>
+                                <tbody id='attack-tracking'>
+                                    <!-- Dynamic content -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Modal -->
+        <div class="modal" id="settings-modal">
+            <div class="modal-content">
+                <div class="modal-header flex-between">
+                    <h3 class="flex-center"><i class="fas fa-cog"></i> Settings</h3>
+                    <button class="modal-close flex-center-both" id="settings-close" title="Close settings" aria-label="Close settings">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="settings-section">
+                        <h4 class="flex-center"><i class="fas fa-volume-up"></i> Audio Alerts</h4>
+                        <div class="setting-item">
+                            <label class="setting-row">
+                                <span class="setting-title">Play sound alerts</span>
+                                <input type="checkbox" id="sound-alerts">
+                            </label>
+                            <span class="setting-description">Enable audio notifications for new attacks</span>
+                        </div>
+                        <div class="setting-item" id="sound-options">
+                            <div class="setting-row">
+                                <span class="setting-title">Alert sound</span>
+                                <select id="alert-sound" class="setting-select" title="Alert sound">
+                                    <option value="beep">Digital Beep</option>
+                                    <option value="notification">Notification Chime</option>
+                                    <option value="alert">Security Alert</option>
+                                    <option value="retro_videogame">Retro Videogame</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h4 class="flex-center"><i class="fas fa-earth-europe"></i> Map</h4>
+                        <div class="setting-item">
+                            <div class="setting-row">
+                                <span class="setting-title">Activity shading</span>
+                                <select id="shading-mode" class="setting-select" title="Activity shading mode">
+                                    <option value="mixed">Mixed (auto by zoom)</option>
+                                    <option value="choropleth">Countries only</option>
+                                    <option value="heatmap">Heatmap only</option>
+                                    <option value="off">Off</option>
+                                </select>
+                            </div>
+                            <span class="setting-description">Shades where observed events geolocate
+                                by source IP address — not attribution: it does not establish that an
+                                attacker, operator or state actor is physically located there. Positions
+                                are GeoIP city/centroid estimates and frequently mark hosting providers
+                                and data centres; proxies, VPNs and compromised hosts all shift the
+                                apparent origin. In Mixed mode the country shading crossfades into a
+                                density heatmap while zooming in.</span>
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h4 class="flex-center"><i class="fas fa-database"></i> Data Management</h4>
+                        <div class="setting-item">
+                            <div class="setting-row">
+                                <span class="setting-title">Cache storage</span>
+                                <button class="btn-base btn-warning hover-lift" id="clear-cache">
+                                    <i class="fas fa-trash-alt"></i> Clear Cache
+                                </button>
+                            </div>
+                            <span class="setting-description">Clear cached attack data and reset map markers</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer flex-between">
+                    <button class="btn-base btn-secondary hover-lift" id="reset-settings">
+                        <i class="fas fa-undo"></i> Reset to Default
+                    </button>
+                    <button class="btn-base btn-primary hover-lift" id="save-settings">
+                        <i class="fas fa-save"></i> Save Settings
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <script src="static/cache-bridge.js" defer integrity="sha384-mMltIbf7JoxVuM6ZaB7TYkrLmY2njkbSTL9VvYqNKtmct/C2X1/JvKr8FeYHU0I+"></script>
+        <script src="static/map.js" defer></script>
+        <script src="static/dashboard.js" defer integrity="sha384-oV+F5o8wm7wxU+36GeUCND1m9/O98l7cfJCynfdDZZCukh2p5I4OfDHJvPB1500I"></script>
+    </body>
+
+</html>

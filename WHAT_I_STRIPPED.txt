@@ -1,0 +1,16 @@
+This is a trimmed copy of telekom-security/t-pot-attack-map, kept as a base.
+Original license preserved in License.md — credit belongs to Telekom Security / T-Pot.
+
+KEPT (what makes the map run + look right):
+  static/            the whole frontend (MapLibre GL, replay engine, dashboard, basemap)
+  static/dist/world.pmtiles   the 45MB offline world basemap (SHA-256 verified)
+  AttackMapServer.py + demo_events.py   local web server + synthetic demo feed
+  License.md, README.md
+
+REMOVED (not needed for a standalone/offline base):
+  DataServer.py      the honeypot backend (reads a live Elasticsearch/Redis you don't have)
+  docs/              their internal dev docs + regression-test screenshots
+  .github/, tools/   CI config + basemap-build/test scripts (basemap already fetched)
+  .git/, .gitignore  repo history
+
+HOW TO RUN (see RUN.txt).
